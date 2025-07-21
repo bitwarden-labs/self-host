@@ -208,6 +208,8 @@ function checkSmtp() {
     ssl=$(grep 'globalSettings__mail__smtp__ssl=' "$CONFIG_FILE" | cut -d '=' -f2)
     username=$(grep 'globalSettings__mail__smtp__username=' "$CONFIG_FILE" | cut -d '=' -f2)
     password=$(grep 'globalSettings__mail__smtp__password=' "$CONFIG_FILE" | cut -d '=' -f2)
+    from_address="bitwarden-check@localhost" # Dummy sender
+    to_address="bitwarden-check@localhost"   # Dummy recipient (can be adjusted)
 
     if [ "$ssl" == "true" ]; then
         ssl_command="-ssl"
@@ -215,29 +217,44 @@ function checkSmtp() {
         ssl_command="-starttls smtp"
     fi
 
+    echo "Connecting to $host:$port and performing SMTP transaction..."
     set +e
     SMTP_RESPONSE=$(
         {
             echo "EHLO localhost"
             if [ "$ssl_command" != "-ssl" ]; then
                 echo "STARTTLS"
-                sleep 2
+                sleep 1
                 echo "EHLO localhost"
             fi
-            # Check if username and password are set before proceeding
             if [[ -n "$username" && -n "$password" ]]; then
                 echo "AUTH LOGIN"
                 echo "$(echo -ne "$username" | base64)"
                 echo "$(echo -ne "$password" | base64)"
             fi
+            echo "MAIL FROM:<$from_address>"
+            echo "RCPT TO:<$to_address>"
+            echo "DATA"
+            echo "Subject: Bitwarden SMTP Test"
+            echo ""
+            echo "This is a test email from Bitwarden's SMTP check script."
+            echo "."
             echo "QUIT"
-        } | openssl s_client -connect $host:$port $ssl_command -ign_eof 2>/dev/null
+        } | openssl s_client -connect $host:$port $ssl_command -ign_eof 2>&1
     )
 
+    echo "$SMTP_RESPONSE"
+
     if echo "$SMTP_RESPONSE" | grep -q "^2[0-9][0-9] "; then
-        echo -e "SMTP settings are correct."
+        echo "SMTP settings are correct. Test message accepted by the server."
+        exit 0
     else
-        echo "SMTP authentication failed or connection error occurred."
+        if [[ -z "$username" || -z "$password" ]]; then
+            echo "SMTP check failed: unauthenticated relay may not allow this test. If emails are sending successfully in Bitwarden, this can likely be ignored."
+        else
+            echo "SMTP check failed: authentication error or connection issue. Review the response above for details."
+        fi
+        exit 1
     fi
 }
 
