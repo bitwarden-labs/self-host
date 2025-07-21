@@ -208,8 +208,15 @@ function checkSmtp() {
     ssl=$(grep 'globalSettings__mail__smtp__ssl=' "$CONFIG_FILE" | cut -d '=' -f2)
     username=$(grep 'globalSettings__mail__smtp__username=' "$CONFIG_FILE" | cut -d '=' -f2)
     password=$(grep 'globalSettings__mail__smtp__password=' "$CONFIG_FILE" | cut -d '=' -f2)
-    from_address="bitwarden-check@localhost" # Dummy sender
-    to_address="bitwarden-check@localhost"   # Dummy recipient (can be adjusted)
+    from_address=$(grep 'globalSettings__mail__replyToEmail=' "$CONFIG_FILE" | cut -d '=' -f2)
+
+    if [ -z "$from_address" ]; then
+        echo "SMTP Reply-To address not configured in $CONFIG_FILE (globalSettings__mail__replyToEmail=)"
+        exit 1
+    fi
+
+    # Use replyTo address as both sender and recipient for the test
+    to_address="$from_address"
 
     if [ "$ssl" == "true" ]; then
         ssl_command="-ssl"
